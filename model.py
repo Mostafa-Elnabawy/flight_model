@@ -1,5 +1,6 @@
 from pyspark.sql import SparkSession
-
+from pyspark.ml.feature import StringIndexer,OneHotEncoder,VectorAssembler
+from pyspark.ml import Pipeline
 spark = SparkSession.builder.master("local")\
                             .appName('Flight_model')\
                             .getOrCreate()
@@ -28,4 +29,23 @@ model_data = model_data.withColumn("label", model_data.is_late.cast("integer"))
 
 # Remove missing values
 model_data = model_data.filter("arr_delay is not NULL and dep_delay is not NULL and air_time is not NULL and plane_year is not NULL")
+
+# Create a StringIndexer
+carr_indexer = StringIndexer(inputCol = "carrier" , outputCol="carrier_index")
+dest_indexer = StringIndexer(inputCol = "dest" , outputCol="dest_index")
+
+# Create a OneHotEncoder
+carr_encoder = OneHotEncoder(inputCol="carrier_index" , outputCol="carrier_fact")
+dest_encoder = OneHotEncoder(inputCol="dest_index" , outputCol="dest_fact")
+
+features = ["month", "air_time", "carrier_fact", "dest_fact", "plane_age"]
+
+# Make a VectorAssembler
+vec_assembler = VectorAssembler(inputCols=["month", "air_time", "carrier_fact", "dest_fact", "plane_age"], outputCol="features")
+
+# Import Pipeline
+from pyspark.ml import Pipeline
+
+# Make the pipeline
+flights_pipe = Pipeline(stages=[dest_indexer, dest_encoder, carr_indexer, carr_encoder, vec_assembler])
 model_data.show(5)
