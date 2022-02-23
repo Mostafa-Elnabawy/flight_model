@@ -1,6 +1,14 @@
 from pyspark.sql import SparkSession
 from pyspark.ml.feature import StringIndexer,OneHotEncoder,VectorAssembler
 from pyspark.ml import Pipeline
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+import numpy as np
+from pyspark.ml.tuning import ParamGridBuilder,CrossValidator
+import pandas as pd
+import os
+import pickle
+
 spark = SparkSession.builder.master("local")\
                             .appName('Flight_model')\
                             .getOrCreate()
@@ -48,4 +56,41 @@ from pyspark.ml import Pipeline
 
 # Make the pipeline
 flights_pipe = Pipeline(stages=[dest_indexer, dest_encoder, carr_indexer, carr_encoder, vec_assembler])
-model_data.show(5)
+
+# Fit and transform the data
+piped_data = flights_pipe.fit(model_data).transform(model_data)
+
+# Split the data into training and test sets
+training, test = piped_data.randomSplit([0.6,0.4],42)
+test.rdd.saveAsPickleFile('test_pickled')
+print("pickled successfully")
+
+#modeling
+#LogisticRegression
+# Create a LogisticRegression Estimator
+lr = LogisticRegression()
+
+
+#cross_validation using area under the curve AUC
+evaluator = BinaryClassificationEvaluator(metricName="areaUnderROC")
+
+# Create the parameter grid
+grid = ParamGridBuilder()
+# Add the hyperparameter
+grid = grid.addGrid(lr.regParam, np.arange(0, .1, .01))
+grid = grid.addGrid(lr.elasticNetParam, [0,1])
+
+# Build the grid
+grid = grid.build()
+
+# Create the CrossValidator
+cv = CrossValidator(estimator=lr,
+               estimatorParamMaps=grid,
+               evaluator=evaluator
+               )
+# Fit cross validation models
+models = cv.fit(training)
+
+# Extract the best model
+best_lr = models.bestModel
+best_lr.save("bestmodel")
